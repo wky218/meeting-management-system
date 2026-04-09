@@ -1,0 +1,71 @@
+00server:
+  port: 8080
+# DeepSeek AI配置
+ai:
+  api:
+    url: https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/completions
+    key: your-api-key
+    secret: your-secret-key
+    model: ernie-bot-4
+spring:
+  jackson:
+    time-zone: Asia/Shanghai
+    datasource:
+      url: jdbc:mysql://localhost:3306/your_database?serverTimezone=Asia/Shanghai
+  jvm:
+    args: --add-opens java.base/java.lang.invoke=ALL-UNNAMED
+  datasource:
+    url: jdbc:mysql://localhost:3306/cms?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 1024MB
+      max-request-size: 1024MB
+  web:
+    resources:
+      static-locations: classpath:/static/
+    mvc:
+      static-path-pattern: /**
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: com.cms.pojo
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      logic-delete-field: deleted  # 逻辑删除字段名
+      logic-delete-value: 1        # 逻辑已删除值
+      logic-not-delete-value: 0    # 逻辑未删除值
+      id-type: assign_id
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+# ... 其他配置 ...
+
+upload:
+  dir: files  #相对路径上传
+
+logging:
+  level:
+    com.cms.websocket: DEBUG  # 设置包的日志级别
+
+meeting:
+  file:
+    upload-dir: ${upload.dir}
+youdao:
+  appKey: 4f8bbffc5c8b9cbb
+  appSecret: JeyptgkrufrF8vtbsPDi6Ee03qlJA1Qx
+
+webrtc:
+  turn-server: turn:fwwhub.fun:3478
+  turn-username: user1
+  turn-credential: password1
+  realm: fwwhub.fun
+  stun-servers:
+    - stun:stun.l.google.com:19302
+    - stun:stun1.l.google.com:19302
+    - stun:stun2.l.google.com:19302
+    - stun:stun3.l.google.com:19302
+    - stun:stun4.l.google.com:19302

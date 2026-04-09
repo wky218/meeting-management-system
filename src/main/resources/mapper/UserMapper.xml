@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.cms.mapper.UserMapper">
+    <!-- 根据用户名查询用户 -->
+    <select id="selectByUsername" resultType="com.cms.pojo.User">
+        SELECT * FROM users WHERE username = #{username}
+    </select>
+
+    <!-- 用户登录 -->
+    <select id="login" resultType="com.cms.pojo.User">
+        SELECT * FROM users
+        WHERE username = #{username}
+          AND password = #{password}
+    </select>
+
+    <!-- 根据账号获取用户详细信息 -->
+    <select id="getUserInfo" resultType="com.cms.pojo.User">
+        SELECT
+            u.*,
+            d.name as departmentName,
+            r.role_name as roleName
+        FROM users u
+                 LEFT JOIN departments d ON u.department_id = d.department_id
+                 LEFT JOIN roles r ON u.role_id = r.role_id
+        WHERE u.username = #{account}
+    </select>
+    <!-- 查询用户列表 -->
+    <select id="selectUserList" resultType="com.cms.pojo.User">
+        SELECT
+        u.*,
+        d.name as departmentName,
+        r.role_name as roleName
+        FROM users u
+        LEFT JOIN departments d ON u.department_id = d.department_id
+        LEFT JOIN roles r ON u.role_id = r.role_id
+        <where>
+            <if test="username != null and username != ''">
+                AND u.username LIKE CONCAT('%', #{username}, '%')
+            </if>
+            <if test="departmentId != null">
+                AND u.department_id = #{departmentId}
+            </if>
+        </where>
+    </select>
+
+    <!-- 检查用户名是否存在 -->
+    <select id="checkUsername" resultType="java.lang.Integer">
+        SELECT COUNT(*) FROM users WHERE username = #{username}
+    </select>
+</mapper>

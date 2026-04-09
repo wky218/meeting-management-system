@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>语音聊天测试</title>
+    <meta charset="UTF-8">
+    <style>
+        .control-panel {
+            margin: 20px;
+            padding: 20px;
+            border: 1px solid #ccc;
+        }
+        .status {
+            margin-top: 10px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="control-panel">
+        <h2>语音聊天测试111</h2>
+        <div>
+            <label>会议ID：</label>
+            <input type="text" id="meetingId" value="1912158389469364225">
+            <label>用户ID：</label>
+            <input type="text" id="userId" value="1912151761567330306">
+        </div>
+        <div>
+            <button onclick="joinMeeting()">加入会议</button>
+            <button id="startBtn" onclick="startVoice()" disabled>开始语音</button>
+            <button id="muteBtn" onclick="toggleMute()" disabled>静音</button>
+            <button id="stopBtn" onclick="stopVoice()" disabled>停止语音</button>
+        </div>
+        <div id="status" class="status">未连接</div>
+        <div id="participants" class="status">参会人数：0</div>
+    </div>
+
+    <script>
+        let ws;
+        let localStream;
+        let peerConnections = {};
+        let isMuted = false;
+
+        async function joinMeeting() {
+        const meetingId = document.getElementById('meetingId').value;
+        const userId = document.getElementById('userId').value;
+        
+        try {
+            console.log('正在加入会议...');
+            const response = await fetch(`/api/voice/join/${meetingId}/${userId}`);
+            const data = await response.json();
+            console.log('收到响应:', data);
+            
+            if (data.code === 200) {
+                // 获取当前会议状态
+                const statusResponse = await fetch(`/api/voice/status/${meetingId}`);
+                const statusData = await statusResponse.json();
+                console.log('会议状态:', statusData);
+                
+                if (statusData.code === 200) {
+                    document.getElementById('participants').textContent = 
+                        '参会人数：' + statusData.data.participantCount;
+                }
+                
+                await connectWebSocket(data.data.wsUrl);
+                document.getElementById('startBtn').disabled = false;
+                updateStatus('已连接到会议');
+            } else {
+                updateStatus('加入会议失败: ' + data.message);
+            }
+        } catch (error) {
+            console.error('加入会议失败:', error);
+            updateStatus('加入会议失败: ' + error.message);
+        }
+    }
+function connectWebSocket(wsUrl) {
+        return new Promise((resolve, reject) => {
+            try {
+                ws = new WebSocket(wsUrl);
+                
+                ws.onopen = () => {
+                    console.log('WebSocket连接已建立');
+                    updateStatus('WebSocket连接已建立');
+                    resolve();
+                };
+                
+                ws.onmessage = async (event) => {
+                    console.log('收到WebSocket消息:', event.data);
+                    try {
+                        const message = JSON.parse(event.data);
+                        if (message.type === 'participant-count') {
+                            console.log('更新参会人数:', message.count);
+                            document.getElementById('participants').textContent = 
+                                '参会人数：' + message.count;
+                        }
+                    } catch (error) {
+                        console.error('处理WebSocket消息失败:', error);
+                    }
+                };
+                
+                // ... 其他 WebSocket 事件处理保持不变 ...
+            } catch (error) {
+                console.error('创建WebSocket失败:', error);
+                reject(error);
+            }
+        });
+    }
+
+        async function startVoice() {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                document.getElementById('muteBtn').disabled = false;
+                document.getElementById('stopBtn').disabled = false;
+                document.getElementById('startBtn').disabled = true;
+                updateStatus('语音已开启');
+                
+                // 创建并发送offer
+                createPeerConnection();
+            } catch (error) {
+                console.error('获取麦克风失败:', error);
+                updateStatus('获取麦克风失败: ' + error.message);
+            }
+        }
+
+        function createPeerConnection() {
+            const configuration = {
+                iceServers: [
+                    {
+                        urls: 'stun:stun.l.google.com:19302'
+                    }
+                ]
+            };
+
+            const pc = new RTCPeerConnection(configuration);
+            
+            localStream.getTracks().forEach(track => {
+                pc.addTrack(track, localStream);
+            });
+
+            pc.onicecandidate = event => {
+                if (event.candidate) {
+                    sendMessage({
+                        type: 'ice-candidate',
+                        candidate: event.candidate
+                    });
+                }
+            };
+
+            pc.createOffer()
+                .then(offer => pc.setLocalDescription(offer))
+                .then(() => {
+                    sendMessage({
+                        type: 'offer',
+                        sdp: pc.localDescription
+                    });
+                })
+                .catch(error => {
+                    console.error('创建offer失败:', error);
+                });
+
+            return pc;
+        }
+
+        function sendMessage(message) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                console.log('发送消息:', message);
+                ws.send(JSON.stringify(message));
+            } else {
+                console.error('WebSocket未连接');
+            }
+        }
+
+        function handleWebSocketMessage(message) {
+            console.log('处理消息:', message);
+            // 处理接收到的消息
+        }
+
+        function stopVoice() {
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                document.getElementById('startBtn').disabled = false;
+                document.getElementById('muteBtn').disabled = true;
+                document.getElementById('stopBtn').disabled = true;
+                updateStatus('语音已停止');
+            }
+        }
+
+        function toggleMute() {
+            if (localStream) {
+                const audioTrack = localStream.getAudioTracks()[0];
+                audioTrack.enabled = !audioTrack.enabled;
+                isMuted = !audioTrack.enabled;
+                document.getElementById('muteBtn').textContent = isMuted ? '取消静音' : '静音';
+                updateStatus(isMuted ? '已静音' : '已取消静音');
+            }
+        }
+
+        function updateStatus(message) {
+            console.log('状态更新:', message);
+            document.getElementById('status').textContent = message;
+        }
+    </script>
+</body>
+</html>

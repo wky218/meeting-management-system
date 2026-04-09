@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>语音聊天测试</title>
+    <meta charset="UTF-8">
+    <style>
+        .control-panel {
+            margin: 20px;
+            padding: 20px;
+            border: 1px solid #ccc;
+        }
+        .status {
+            margin-top: 10px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="control-panel">
+        <h2>语音聊天测试111</h2>
+        <div>
+            <label>会议ID：</label>
+            <input type="text" id="meetingId" value="1912158389469364225">
+            <label>用户ID：</label>
+            <input type="text" id="userId" value="1912151761567330306">
+        </div>
+        <div>
+            <button onclick="joinMeeting()">加入会议</button>
+            <button id="startBtn" onclick="startVoice()" disabled>开始语音</button>
+            <button id="muteBtn" onclick="toggleMute()" disabled>静音</button>
+            <button id="stopBtn" onclick="stopVoice()" disabled>停止语音</button>
+        </div>
+        <div id="status" class="status">未连接</div>
+        <div id="participants" class="status">参会人数：0</div>
+    </div>
+
+    <script>
+        let ws;
+        let localStream;
+        let peerConnection;
+        let isInitiator = false;
+
+        async function joinMeeting() {
+            const meetingId = document.getElementById('meetingId').value;
+            const userId = document.getElementById('userId').value;
+            
+            try {
+                console.log('正在加入会议...');
+                // 修改为相对路径
+                const response = await fetch(`/api/voice/join/${meetingId}/${userId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('收到响应:', data);
+                
+                if (data.code === 200) {
+                    await connectWebSocket(data.data.wsUrl);
+                    document.getElementById('startBtn').disabled = false;
+                    updateStatus('已连接到会议');
+                } else {
+                    updateStatus('加入会议失败: ' + data.message);
+                }
+            } catch (error) {
+                console.error('加入会议失败:', error);
+                updateStatus('加入会议失败: ' + error.message);
+            }
+        }
+
+        async function connectWebSocket(wsUrl) {
+            return new Promise((resolve, reject) => {
+                try {
+                    ws = new WebSocket(wsUrl);
+                    
+                    ws.onopen = () => {
+                        console.log('WebSocket连接已建立');
+                        updateStatus('WebSocket连接已建立');
+                        resolve();
+                    };
+                    
+                    ws.onmessage = async (event) => {
+                        console.log('收到消息:', event.data);
+                        const message = JSON.parse(event.data);
+                        await handleMessage(message);
+                    };
+                    
+                    ws.onclose = () => {
+                        console.log('WebSocket连接已关闭');
+                        updateStatus('WebSocket连接已关闭');
+                    };
+                    
+                    ws.onerror = (error) => {
+                        console.error('WebSocket错误:', error);
+                        updateStatus('WebSocket错误');
+                        reject(error);
+                    };
+                } catch (error) {
+                    console.error('创建WebSocket失败:', error);
+                    reject(error);
+                }
+            });
+        }
+
+        async function startVoice() {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                document.getElementById('muteBtn').disabled = false;
+                document.getElementById('stopBtn').disabled = false;
+                document.getElementById('startBtn').disabled = true;
+                updateStatus('语音已开启');
+                
+                // 创建并发送offer
+                await createPeerConnection();
+            } catch (error) {
+                console.error('获取麦克风失败:', error);
+                updateStatus('获取麦克风失败: ' + error.message);
+            }
+        }
+
+        // 获取ICE服务器配置
+        async function getIceServers() {
+            try {
+                const response = await fetch('/api/webrtc/ice-servers');
+                const result = await response.json();
+                if (result.code === 200) {
+                    return result.data;
+                }
+                throw new Error('获取ICE服务器配置失败');
+            } catch (error) {
+                console.error('获取ICE服务器配置失败:', error);
+                return {
+                    iceServers: [{
+                        urls: 'stun:stun.l.google.com:19302'
+                    }]
+                };
+            }
+        }
+
+        async function createPeerConnection() {
+            try {
+                const configuration = await getIceServers();
+                peerConnection = new RTCPeerConnection(configuration);
+                
+                // 添加本地音频轨道
+                localStream.getTracks().forEach(track => {
+                    peerConnection.addTrack(track, localStream);
+                });
+
+                // 处理ICE候选
+                peerConnection.onicecandidate = event => {
+                    if (event.candidate) {
+                        sendMessage({
+                            type: 'ice-candidate',
+                            candidate: event.candidate
+                        });
+                    }
+                };
+
+                // 处理连接状态变化
+                peerConnection.onconnectionstatechange = () => {
+                    updateStatus('连接状态: ' + peerConnection.connectionState);
+                };
+
+                // 处理ICE连接状态变化
+                peerConnection.oniceconnectionstatechange = () => {
+                    updateStatus('ICE连接状态: ' + peerConnection.iceConnectionState);
+                };
+
+                // 处理远程音频流
+                peerConnection.ontrack = event => {
+                    const remoteAudio = document.getElementById('remoteAudio');
+                    if (event.streams && event.streams[0]) {
+                        remoteAudio.srcObject = event.streams[0];
+                    }
+                };
+
+                if (isInitiator) {
+                    // 创建并发送offer
+                    const offer = await peerConnection.createOffer();
+                    await peerConnection.setLocalDescription(offer);
+                    sendMessage({
+                        type: 'offer',
+                        sdp: peerConnection.localDescription
+                    });
+                }
+
+                updateStatus('PeerConnection创建成功');
+            } catch (error) {
+                console.error('创建PeerConnection失败:', error);
+                updateStatus('创建PeerConnection失败: ' + error.message);
+            }
+        }
+
+        // 处理收到的消息
+        async function handleMessage(message) {
+            try {
+                switch (message.type) {
+                    case 'offer':
+                        await handleOffer(message);
+                        break;
+                    case 'answer':
+                        await handleAnswer(message);
+                        break;
+                    case 'ice-candidate':
+                        await handleIceCandidate(message);
+                        break;
+                    case 'user-joined':
+                        isInitiator = true;
+                        await createPeerConnection();
+                        break;
+                }
+            } catch (error) {
+                console.error('处理消息失败:', error);
+                updateStatus('处理消息失败: ' + error.message);
+            }
+        }
+
+        async function handleOffer(message) {
+            if (!peerConnection) {
+                await createPeerConnection();
+            }
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(message.sdp));
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+            sendMessage({
+                type: 'answer',
+                sdp: peerConnection.localDescription
+            });
+        }
+
+        async function handleAnswer(message) {
+            if (peerConnection) {
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(message.sdp));
+            }
+        }
+
+        async function handleIceCandidate(message) {
+            if (peerConnection) {
+                try {
+                    await peerConnection.addIceCandidate(new RTCIceCandidate(message.candidate));
+                } catch (error) {
+                    console.error('添加ICE候选失败:', error);
+                }
+            }
+        }
+
+        function sendMessage(message) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                console.log('发送消息:', message);
+                ws.send(JSON.stringify(message));
+            } else {
+                console.error('WebSocket未连接');
+            }
+        }
+
+        function stopVoice() {
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                document.getElementById('startBtn').disabled = false;
+                document.getElementById('muteBtn').disabled = true;
+                document.getElementById('stopBtn').disabled = true;
+                updateStatus('语音已停止');
+            }
+        }
+
+        function toggleMute() {
+            if (localStream) {
+                const audioTrack = localStream.getAudioTracks()[0];
+                audioTrack.enabled = !audioTrack.enabled;
+                updateStatus(audioTrack.enabled ? '已取消静音' : '已静音');
+            }
+        }
+
+        function updateStatus(message) {
+            console.log('状态更新:', message);
+            document.getElementById('status').textContent = message;
+        }
+    </script>
+</body>
+</html>

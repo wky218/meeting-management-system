@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.cms.mapper.MeetingMapper">
+    <select id="selectRecommendedMeetingsWithScore" resultType="com.cms.pojo.Meeting">
+        SELECT DISTINCT m.*,
+        COUNT(DISTINCT mc.category_name) as match_score
+        FROM meetings m
+        LEFT JOIN meeting_category_relation mcr ON m.meeting_id = mcr.meeting_id
+        LEFT JOIN meeting_categories mc ON mcr.category_id = mc.category_id
+        WHERE mc.category_name IN
+        <foreach collection="tagNames" item="tag" open="(" separator="," close=")">
+            #{tag}
+        </foreach>
+        AND m.start_time > NOW()
+        GROUP BY m.meeting_id
+        ORDER BY match_score DESC, m.start_time ASC
+    </select>
+</mapper>

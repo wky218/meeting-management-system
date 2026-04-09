@@ -1,0 +1,173 @@
+
+
+-- 删除数据库如果存在
+DROP DATABASE IF EXISTS cmssql;
+
+-- 创建新数据库
+CREATE DATABASE cmssql CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+
+
+
+
+
+
+
+
+
+
+
+毕业设计数据库
+一. 用户与权限管理
+
+1.用户表 (users)
+user_id：用户ID，主键，自增。
+username：用户名，唯一且不能为空。
+password：用户密码，不能为空。
+email：用户邮箱，可为空。
+phone：手机号，可为空。
+role_id：角色ID，外键，关联角色表。
+department_id：部门ID，外键，关联部门表。
+created_at：用户创建时间，默认为当前时间。
+
+2.角色表 (roles)
+role_id：角色ID，主键。
+role_name：角色名称，唯一且不能为空。
+permissions：权限列表，存储JSON格式的权限信息。
+
+3.部门表 (departments)
+department_id：部门ID，主键。
+name：部门名称，不能为空。
+description：部门描述，可为空。
+
+二. 会议管理
+4.会议表 (meetings)
+meeting_id：会议ID，主键。
+title：会议标题，不能为空。
+description：会议描述，可为空。
+start_time：会议开始时间，不能为空。
+end_time：会议结束时间，不能为空。
+organizer_id：组织者用户ID，关联用户表。
+location - 会议地点/线上会议链接
+status：会议状态（待开始、进行中、结束），默认为“待开始”。
+
+5.会议参与表 (meeting_participants)
+participant_id：参与记录ID，主键。
+meeting_id：会议ID，外键，关联会议表。
+user_id：用户ID，外键，关联用户表。
+role：参会角色（主持人、与会者），默认为“与会者”。
+sign_in_time：签到时间，可为空。
+leave_status：请假状态（正常/请假/缺席）
+
+三. 会议资料与笔记
+6.会议资料表 (meeting_documents)
+document_id：资料ID，主键。
+meeting_id：会议ID，外键，关联会议表。
+file_path：文件路径，不能为空。
+uploaded_by：上传者用户ID，关联用户表。
+uploaded_at：上传时间，默认为当前时间。
+
+7.会议笔记表 (meeting_notes)
+note_id：笔记ID，主键。
+meeting_id：会议ID，外键，关联会议表。
+user_id：用户ID，外键，关联用户表。
+note_content：笔记内容，可为空。
+created_at：笔记创建时间，默认为当前时间。
+
+四. 通知与签到审批
+
+8.通知表 (notifications)
+notification_id：通知ID，主键。
+title：通知标题，不能为空。
+content：通知内容，可为空。
+target_id：目标会议或用户ID，外键，关联会议或用户表。
+type：通知类型（会议通知、系统通知）。
+created_at：通知创建时间，默认为当前时间。
+
+9.签到表 (attendance)
+attendance_id：签到ID，主键。
+meeting_id：会议ID，外键，关联会议表。
+user_id：用户ID，外键，关联用户表。
+sign_in_time：签到时间，默认为当前时间。
+
+五. 统计与审批
+10.统计表 (statistics)
+stat_id：统计记录ID，主键。
+meeting_id：会议ID，外键，关联会议表。
+total_participants：总参会人数。
+signed_in：实际签到人数。
+leave_count：请假人数。
+
+11.请假审批表 (leave_requests)
+leave_id：请假记录ID，主键。
+user_id：用户ID，外键，关联用户表。
+meeting_id：会议ID，外键，关联会议表。
+reason：请假原因，可为空。
+status：审批状态（待审批、通过、拒绝），默认为“待审批”。
+
+14. 投票表（Votes）
+描述：会议中的投票活动记录
+字段：
+vote_id (主键) - 投票唯一标识
+meeting_id (外键) - 会议ID
+title - 投票标题
+description - 投票描述
+start_time - 投票开始时间
+end_time - 投票结束时间
+
+15. 投票选项表（Vote_Options）
+描述：投票的选项
+字段：
+option_id (主键) - 选项唯一标识
+vote_id (外键) - 投票ID
+option_text - 选项内容
+
+16. 投票记录表（Vote_Records）
+描述：记录用户的投票选择
+字段：
+record_id (主键) - 记录唯一标识
+vote_id (外键) - 投票ID
+user_id (外键) - 用户ID
+option_id (外键) - 选项ID
+vote_time - 投票时间
+
+关系说明
+用户表与部门表之间是一对多关系，每个用户属于一个部门。
+会议表与会议参与表之间是一对多关系，每场会议对应多个参会者。
+会议表与会议资料表之间是一对多关系，每场会议可以上传多份会议资料。
+会议参与表与签到表之间存在一对一关系，每个参会者有一条签到记录。
+请假审批表与会议表存在多对一关系，每场会议可能有多个请假记录。
+
+好的，让我为您解释这些角色的权限设置：
+
+1. 管理员(admin)权限：
+   
+   - 系统管理：查看、添加、编辑、删除系统配置
+   - 用户管理：查看、添加、编辑、删除用户
+   - 角色管理：查看、添加、编辑、删除角色
+   - 部门管理：查看、添加、编辑、删除部门
+   - 会议管理：查看、添加、编辑、删除、管理会议
+   - 文档管理：查看、添加、编辑、删除文档
+   - 统计功能：查看和导出统计数据
+   - 审批功能：查看和处理审批
+2. 部门经理(manager)权限：
+   
+   - 用户管理：只能查看用户信息
+   - 部门管理：只能查看部门信息
+   - 会议管理：查看、添加、编辑、管理会议
+   - 文档管理：查看、添加、编辑文档
+   - 统计功能：查看和导出统计数据
+   - 审批功能：查看和处理审批
+3. 秘书(secretary)权限：
+   
+   - 会议管理：查看、添加、编辑会议
+   - 文档管理：查看和添加文档
+   - 统计功能：只能查看统计
+   - 审批功能：只能查看审批
+4. 普通用户(user)权限：
+   
+   - 会议管理：查看会议和参加会议
+   - 文档管理：只能查看文档
+   - 笔记功能：添加和编辑笔记
+   - 投票功能：查看和参与投票
+这种权限设计采用了层级管理的思想，从高到低依次是：管理员 > 部门经理 > 秘书 > 普通用户，每个角色都有其特定的职责和权限范围。
